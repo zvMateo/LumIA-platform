@@ -16,15 +16,19 @@ async function bootstrap() {
     }),
   );
 
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : ['http://localhost:3000'];
+
   app.enableCors({
-    origin: process.env.APP_URL ?? 'http://localhost:3000',
+    origin: allowedOrigins,
     credentials: true,
   });
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('configuration.app.port', 3001);
+  const port = process.env.PORT ?? configService.get<number>('configuration.app.port', 3001);
 
   await app.listen(port);
-  console.log(`API running on http://localhost:${port}/api`);
+  console.log(`API running on port ${port}`);
 }
 bootstrap();
