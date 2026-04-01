@@ -1,8 +1,15 @@
 import type { NextConfig } from 'next';
+import path from 'path';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
+  experimental: {
+    turbo: {
+      root: path.resolve(__dirname),
+    },
+  },
   async rewrites() {
     return [
       {
