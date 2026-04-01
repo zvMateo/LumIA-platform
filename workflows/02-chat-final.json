@@ -1,0 +1,512 @@
+{
+  "name": "VocTest — Chat Conversacional",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voctest/chat-handler",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8fc49d27-832b-462c-beea-c76f1e010558",
+      "name": "[Webhook] Chat entrante",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1520, 528],
+      "webhookId": "voctest-chat-handler"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "value",
+        "key": "={{ 'voc:session:' + $json.body.sessionId }}",
+        "options": {}
+      },
+      "id": "1800e18c-c31b-4866-9e3b-5146abc38a3d",
+      "name": "[Redis] GET Sesión",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [-1296, 528],
+      "credentials": {
+        "redis": {
+          "id": "kC0Bfi0yQOAqlL1I",
+          "name": "Redis_GoodApps"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "session-exists",
+              "leftValue": "={{ $json.value }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f624851e-5dad-4bf5-a579-dc8c92a3beeb",
+      "name": "[IF] Sesión existe",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [-1072, 528]
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const body = $('[Webhook] Chat entrante').item.json.body;\n  const rawValue = $input.item.json.value;\n  let session = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;\n  session.lastActivity = new Date().toISOString();\n  return [{ json: { session, userMessage: body.message } }];\n} catch(e) {\n  throw new Error('[Parse sesión existente] ' + e.message);\n}"
+      },
+      "id": "72f1c896-569e-4b92-8e2f-5ca7315d3edd",
+      "name": "[Code] Parse sesión existente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-848, 432]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('[Webhook] Chat entrante').item.json.body;\nconst session = {\n  sessionId: body.sessionId || ('sess_' + Date.now() + '_' + Math.random().toString(36).substr(2,9)),\n  userId: body.userId || null,\n  tenantId: body.tenantId || null,\n  plan: body.plan || 'b2c',\n  email: body.email || null,\n  userName: body.userName || 'Estudiante',\n  phase: 'WELCOME',\n  status: 'chatting',\n  questionCount: 0,\n  riasecScores: { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 },\n  topicsAsked: [],\n  history: [],\n  createdAt: new Date().toISOString(),\n  lastActivity: new Date().toISOString()\n};\nreturn [{ json: {\n  session,\n  userMessage: body.message || 'Hola, quiero hacer el test vocacional'\n} }];"
+      },
+      "id": "724b055f-38ec-4016-a36a-655a4900afd1",
+      "name": "[Code] Iniciar nueva sesión",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-624, 816]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "awaiting-email-condition",
+              "leftValue": "={{ $json.session.status }}",
+              "rightValue": "awaiting_email",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4874d02d-468a-4d57-b988-18ef7dafba03",
+      "name": "[IF] Esperando email",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [-624, 432]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { session, userMessage } = $input.item.json;\nconst emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;\nconst emailValido = emailRegex.test(userMessage.trim());\n\nif (!emailValido) {\n  session.history.push({ role: 'user', content: userMessage });\n  session.history.push({ role: 'assistant', content: '¡Ups! Ese no parece un email válido. ¿Podés escribirlo de nuevo? Por ejemplo: nombre@correo.com' });\n  session.lastActivity = new Date().toISOString();\n  return [{ json: { session, responseMessage: '¡Ups! Ese no parece un email válido. ¿Podés escribirlo de nuevo? Por ejemplo: nombre@correo.com', testCompleto: false, questionCount: session.questionCount, phase: 'COMPLETE', emailValido: false } }];\n}\n\nconst email = userMessage.trim().toLowerCase();\nsession.email = email;\nsession.status = 'complete';\nsession.history.push({ role: 'user', content: userMessage });\nsession.history.push({ role: 'assistant', content: '¡Perfecto! Tu informe vocacional va a ser enviado a ' + email + '. En unos segundos verás tu perfil completo aquí. 🎉' });\nsession.lastActivity = new Date().toISOString();\n\nreturn [{ json: { session, responseMessage: '¡Perfecto! Tu informe vocacional va a ser enviado a ' + email + '. En unos segundos verás tu perfil completo aquí. 🎉', testCompleto: true, questionCount: session.questionCount, phase: 'COMPLETE', emailValido: true } }];"
+      },
+      "id": "a6a61c41-9c86-457e-a2c9-39ab14e399b8",
+      "name": "[Code] Procesar email recibido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-112, 384]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { session, userMessage } = $input.item.json;\nconst s = session.riasecScores;\nconst dimCounts = {};\nsession.topicsAsked.forEach(function(d) { dimCounts[d] = (dimCounts[d] || 0) + 1; });\nconst dims = ['R', 'I', 'A', 'S', 'E', 'C'];\nconst pendientes = dims.slice().sort(function(a, b) { return (dimCounts[a] || 0) - (dimCounts[b] || 0); }).slice(0, 3).join(', ');\nconst sorted = Object.entries(s).sort(function(a, b) { return b[1] - a[1]; });\nconst perfilEmergente = sorted.filter(function(x) { return x[1] > 0; }).map(function(x) { return x[0] + ':' + x[1]; }).join(' ') || 'sin datos aún';\n\nreturn [{ json: {\n  session,\n  userMessage,\n  agentContext: JSON.stringify({\n    sessionId: session.sessionId,\n    userName: session.userName,\n    phase: session.phase,\n    status: session.status,\n    questionCount: session.questionCount,\n    riasecScores: s,\n    perfilEmergente: perfilEmergente,\n    dimensionesPendientes: pendientes,\n    topicsAsked: Array.from(new Set(session.topicsAsked))\n  })\n} }];"
+      },
+      "id": "cbe4cf8a-d6a2-4669-ad64-a0e85982f767",
+      "name": "[Code] Preparar contexto agente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-400, 768]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4o"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "29d37e02-2d34-4a41-a728-fa8ab8906064",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [-192, 944],
+      "credentials": {
+        "openAiApi": {
+          "id": "LVIDq0T0z4cISnRM",
+          "name": "OpenAi GoodApps"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'voc:agent:' + $('[Code] Preparar contexto agente').item.json.session.sessionId }}",
+        "contextWindowLength": 20
+      },
+      "id": "d6edadec-b371-4a43-aa0a-b45c50306525",
+      "name": "Redis Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
+      "typeVersion": 1.5,
+      "position": [-80, 944],
+      "credentials": {
+        "redis": {
+          "id": "kC0Bfi0yQOAqlL1I",
+          "name": "Redis_GoodApps"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.userMessage }}",
+        "options": {
+          "systemMessage": "=Sos un psicólogo vocacional experto en Holland RIASEC. Conducís entrevistas vocacionales conversacionales, cálidas y profesionales en español rioplatense.\n\nCONTEXTO ACTUAL DE LA SESIÓN:\n{{ $('[Code] Preparar contexto agente').item.json.agentContext }}\n\nDIMENSIONES RIASEC:\nR - Realista: manual, técnico, mecánico, aire libre\nI - Investigador: ciencia, análisis, curiosidad intelectual\nA - Artístico: creatividad, diseño, música, expresión\nS - Social: ayudar, enseñar, empatía, trabajo con personas\nE - Emprendedor: liderazgo, negocios, influencia, ambición\nC - Convencional: orden, datos, administración, precisión\n\nINSTRUCCIONES ESTRICTAS:\n1. Fase WELCOME: Saludá con calidez. Presentá el test en 2 oraciones. Si no tenés el nombre, pedilo.\n2. Fase EXPLORING: UNA sola pregunta por turno. Natural, conversacional. NUNCA mencionés RIASEC ni nombres de dimensiones.\n3. Priorizá dimensiones con menos datos según dimensionesPendientes del contexto.\n4. Variá: hobbies, materias, situaciones, referentes, trabajo ideal.\n5. Cuando questionCount llegue a 25: pedí el email con entusiasmo.\n6. Máximo 100 palabras. Tono cálido y empático.\n\nCUANDO questionCount >= 25, respondé con pedirEmail: true:\n{\"message\":\"¡Excelente! Ya tengo toda la información para generar tu informe vocacional personalizado. ¿A qué correo electrónico querés que te lo enviemos?\",\"dimensionEvaluada\":\"NONE\",\"pesoRespuesta\":0,\"nuevaFase\":\"COMPLETE\",\"testCompleto\":false,\"pedirEmail\":true}\n\nCASO NORMAL — RESPONDÉ SOLO CON ESTE JSON PURO SIN MARKDOWN:\n{\"message\":\"tu respuesta\",\"dimensionEvaluada\":\"R|I|A|S|E|C|NONE\",\"pesoRespuesta\":1,\"nuevaFase\":\"WELCOME|EXPLORING|COMPLETE\",\"testCompleto\":false,\"pedirEmail\":false}"
+        }
+      },
+      "id": "60111b87-1469-47a3-bf1c-fba6cd4bd58f",
+      "name": "[AI Agent] Entrevistador RIASEC",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [-176, 768]
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const agentOutput = $input.item.json.output;\n  const session = $('[Code] Preparar contexto agente').item.json.session;\n  const userMessage = $('[Code] Preparar contexto agente').item.json.userMessage;\n\n  let aiResponse;\n  try {\n    const raw = typeof agentOutput === 'string' ? agentOutput : JSON.stringify(agentOutput);\n    const cleaned = raw.replace(/^```json?\\n?/, '').replace(/\\n?```$/, '').trim();\n    aiResponse = JSON.parse(cleaned);\n  } catch(e) {\n    aiResponse = {\n      message: typeof agentOutput === 'string' ? agentOutput : 'Continuemos con el test.',\n      dimensionEvaluada: 'NONE',\n      pesoRespuesta: 0,\n      nuevaFase: session.phase,\n      testCompleto: false,\n      pedirEmail: false\n    };\n  }\n\n  const dim = aiResponse.dimensionEvaluada;\n  if (dim && dim !== 'NONE' && dim in session.riasecScores) {\n    session.riasecScores[dim] += (aiResponse.pesoRespuesta || 1);\n    session.topicsAsked.push(dim);\n    session.questionCount += 1;\n  }\n\n  session.history.push({ role: 'user', content: userMessage });\n  session.history.push({ role: 'assistant', content: aiResponse.message });\n  if (session.history.length > 30) { session.history = session.history.slice(-30); }\n  session.lastActivity = new Date().toISOString();\n\n  if (session.phase === 'WELCOME' && session.history.length >= 2) { session.phase = 'EXPLORING'; }\n  if (aiResponse.pedirEmail === true || session.questionCount >= 25) {\n    session.status = 'awaiting_email';\n    session.phase = 'COMPLETE';\n  }\n\n  return [{ json: { session, responseMessage: aiResponse.message, testCompleto: false, questionCount: session.questionCount, phase: session.phase, emailValido: false } }];\n} catch(e) {\n  throw new Error('[Parse agente] ' + e.message);\n}"
+      },
+      "id": "ef464cec-5dc8-4ef0-9d5c-2d39f27345dc",
+      "name": "[Code] Parsear respuesta agente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [176, 768]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "email-valid-condition",
+              "leftValue": "={{ $json.emailValido }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b6655a28-63f1-402e-98ba-7684d2f29f42",
+      "name": "[IF] Email válido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [176, 384]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'voc:session:' + $json.session.sessionId }}",
+        "value": "={{ JSON.stringify($json.session) }}",
+        "expire": true,
+        "ttl": 86400
+      },
+      "id": "a2924895-ba27-4184-a1e4-ae10f8b1ca9d",
+      "name": "[Redis] SET Sesión completa",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [400, 336],
+      "credentials": {
+        "redis": {
+          "id": "kC0Bfi0yQOAqlL1I",
+          "name": "Redis_GoodApps"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'voc:session:' + $json.session.sessionId }}",
+        "value": "={{ JSON.stringify($json.session) }}",
+        "expire": true,
+        "ttl": 7200
+      },
+      "id": "2c792fe5-328d-43eb-8c80-43183da767c4",
+      "name": "[Redis] SET Sesión continua",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [400, 720],
+      "credentials": {
+        "redis": {
+          "id": "kC0Bfi0yQOAqlL1I",
+          "name": "Redis_GoodApps"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ message: $json.responseMessage, phase: $json.phase, questionCount: $json.questionCount, sessionId: $json.session.sessionId, testCompleto: $json.testCompleto, processing: false }) }}",
+        "options": {}
+      },
+      "id": "b8e36c6b-7a32-4797-9eaf-83368011efd6",
+      "name": "[Respond] Chat continua",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [624, 720]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ message: $json.responseMessage, phase: 'COMPLETE', questionCount: $json.questionCount, sessionId: $json.session.sessionId, testCompleto: false, processing: true }) }}",
+        "options": {}
+      },
+      "id": "6b71661b-f2f1-4678-8c20-cab19f3d7aec",
+      "name": "[Respond] Test procesando",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [624, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gmn8nwebhook.goodapps.space/webhook/voctest/analysis",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify($json.session) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "26ffe2d6-e19c-4d06-b146-1a98c672383c",
+      "name": "[HTTP] Llamar análisis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [624, 432]
+    }
+  ],
+  "connections": {
+    "[Webhook] Chat entrante": {
+      "main": [
+        [
+          {
+            "node": "[Redis] GET Sesión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Redis] GET Sesión": {
+      "main": [
+        [
+          {
+            "node": "[IF] Sesión existe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[IF] Sesión existe": {
+      "main": [
+        [
+          {
+            "node": "[Code] Parse sesión existente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Code] Iniciar nueva sesión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Code] Parse sesión existente": {
+      "main": [
+        [
+          {
+            "node": "[IF] Esperando email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Code] Iniciar nueva sesión": {
+      "main": [
+        [
+          {
+            "node": "[Code] Preparar contexto agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[IF] Esperando email": {
+      "main": [
+        [
+          {
+            "node": "[Code] Procesar email recibido",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Code] Preparar contexto agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Code] Procesar email recibido": {
+      "main": [
+        [
+          {
+            "node": "[IF] Email válido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Code] Preparar contexto agente": {
+      "main": [
+        [
+          {
+            "node": "[AI Agent] Entrevistador RIASEC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "[AI Agent] Entrevistador RIASEC",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "[AI Agent] Entrevistador RIASEC",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[AI Agent] Entrevistador RIASEC": {
+      "main": [
+        [
+          {
+            "node": "[Code] Parsear respuesta agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Code] Parsear respuesta agente": {
+      "main": [
+        [
+          {
+            "node": "[Redis] SET Sesión continua",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[IF] Email válido": {
+      "main": [
+        [
+          {
+            "node": "[Redis] SET Sesión completa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Redis] SET Sesión continua",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Redis] SET Sesión completa": {
+      "main": [
+        [
+          {
+            "node": "[Respond] Test procesando",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[HTTP] Llamar análisis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Redis] SET Sesión continua": {
+      "main": [
+        [
+          {
+            "node": "[Respond] Chat continua",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "867286dd2db3a76bcb1c7dbac3e0e369ad1e6f723fb9c44a6e80d547a9a696cd"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

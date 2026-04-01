@@ -1,0 +1,258 @@
+{
+  "name": "VocTest — Análisis e Informe",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voctest/analysis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "6e4c1f28-2572-4618-9fd3-8e646d8ba844",
+      "name": "[Webhook] Recibir análisis",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-2576, -1264],
+      "webhookId": "voctest-analysis"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.item.json.body;\n\nlet riasecScores;\ntry {\n  riasecScores = typeof body.riasecScores === 'string' ? JSON.parse(body.riasecScores) : (body.riasecScores || { R:0,I:0,A:0,S:0,E:0,C:0 });\n} catch(e) { riasecScores = { R:0,I:0,A:0,S:0,E:0,C:0 }; }\n\nlet history = [];\ntry {\n  history = typeof body.history === 'string' ? JSON.parse(body.history) : (body.history || []);\n} catch(e) { history = []; }\n\nconst s = riasecScores;\nconst scoresPipe = 'R:' + s.R + '|I:' + s.I + '|A:' + s.A + '|S:' + s.S + '|E:' + s.E + '|C:' + s.C;\nconst sorted = Object.entries(riasecScores).sort(function(a, b) { return b[1] - a[1]; }).map(function(x) { return { dim: x[0], score: x[1] }; });\nconst hollandCode = sorted.slice(0, 3).map(function(x) { return x.dim; }).join('');\nconst historyText = history.filter(function(h) { return h.role === 'user'; }).map(function(h) { return h.content; }).slice(-10).join(' | ');\n\nconst systemPrompt = 'Sos un psicólogo vocacional experto en Holland RIASEC. Analizás perfiles y generás informes profesionales en español rioplatense.\\n\\n' +\n  'FORMATO REQUERIDO (RESPONDÉ SOLO JSON PURO SIN MARKDOWN):\\n' +\n  '{\\n  \"hollandCode\": \"XYZ\",\\n  \"perfilTitulo\": \"título creativo\",\\n  \"perfilDescripcion\": \"párrafo 80-100 palabras\",\\n  \"fortalezas\": [\"f1\",\"f2\",\"f3\",\"f4\"],\\n  \"areasDesarrollo\": [\"a1\",\"a2\",\"a3\"],\\n  \"carreras\": [{\\\"nombre\\\":\\\"Carrera\\\",\\\"match\\\":95,\\\"descripcion\\\":\\\"desc\\\",\\\"area\\\":\\\"campo\\\",\\\"duracion\\\":\\\"4 años\\\",\\\"salida\\\":\\\"laboral\\\"}],\\n  \"consejosEstudio\": [\"c1\",\"c2\",\"c3\"],\\n  \"fraseMotivadora\": \"frase\"\\n}\\n\\nGenerá exactamente 5 carreras.';\n\nconst userPrompt = 'Analizá este perfil:\\n\\nUsuario: ' + (body.userName || 'Estudiante') + '\\nCódigo Holland: ' + hollandCode + '\\nScores RIASEC: ' + scoresPipe + '\\n\\nRespuestas: ' + (historyText || 'No disponible') + '\\n\\nGenerá el informe completo.';\n\nreturn [{ json: {\n  sessionId: body.sessionId,\n  userId: body.userId || null,\n  tenantId: body.tenantId || null,\n  plan: body.plan || 'b2c',\n  email: body.email || null,\n  userName: body.userName || 'Estudiante',\n  riasecScores: riasecScores,\n  scoresPipe: scoresPipe,\n  hollandCode: hollandCode,\n  sortedDims: sorted,\n  requestBody: JSON.stringify({\n    model: 'gpt-4o',\n    max_tokens: 1800,\n    temperature: 0.65,\n    response_format: { type: 'json_object' },\n    messages: [\n      { role: 'system', content: systemPrompt },\n      { role: 'user', content: userPrompt }\n    ]\n  })\n} }];"
+      },
+      "id": "5bd4b950-0bd1-4f8b-ab53-a6e051f22be5",
+      "name": "[Code] Preparar análisis RIASEC",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-2368, -1264]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "id": "4c1c5890-620e-4d39-a5e3-cb2beff4eb95",
+      "name": "[HTTP] OpenAI analizador",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-2144, -1264],
+      "credentials": {
+        "openAiApi": {
+          "id": "LVIDq0T0z4cISnRM",
+          "name": "OpenAi GoodApps"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const raw = $input.item.json.choices[0].message.content;\n  if (!raw) throw new Error('Sin respuesta OpenAI');\n  \n  const meta = $('[Code] Preparar análisis RIASEC').item.json;\n  const cleaned = raw.replace(/^```json?\\n?/, '').replace(/\\n?```$/, '').trim();\n  const analysis = JSON.parse(cleaned);\n  \n  return [{ json: {\n    sessionId: meta.sessionId,\n    userId: meta.userId,\n    tenantId: meta.tenantId,\n    plan: meta.plan,\n    email: meta.email,\n    userName: meta.userName,\n    hollandCode: analysis.hollandCode || meta.hollandCode,\n    riasecScores: meta.riasecScores,\n    sortedDims: meta.sortedDims,\n    perfilTitulo: analysis.perfilTitulo || '',\n    perfilDescripcion: analysis.perfilDescripcion || '',\n    fortalezas: analysis.fortalezas || [],\n    areasDesarrollo: analysis.areasDesarrollo || [],\n    carreras: analysis.carreras || [],\n    consejosEstudio: analysis.consejosEstudio || [],\n    fraseMotivadora: analysis.fraseMotivadora || '',\n    generadoEn: new Date().toISOString(),\n    status: 'READY'\n  } }];\n} catch(e) { \n  throw new Error('[Parse resultado] ' + e.message); \n}"
+      },
+      "id": "149d228d-f1d2-4114-aa38-af76c01606f0",
+      "name": "[Code] Parsear resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1920, -1264]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'voc:result:' + $json.sessionId }}",
+        "value": "={{ JSON.stringify($json) }}",
+        "expire": true,
+        "ttl": 86400
+      },
+      "id": "efa0c504-1458-4e9c-a660-aaec77c1b733",
+      "name": "[Redis] SET Resultado",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [-1696, -1264],
+      "credentials": {
+        "redis": {
+          "id": "kC0Bfi0yQOAqlL1I",
+          "name": "Redis_GoodApps"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const resultado = $input.item.json;\n  if (!resultado.email) {\n    return [{ json: { skipEmail: true } }];\n  }\n\n  const dims = { R: 'Realista', I: 'Investigador', A: 'Artístico', S: 'Social', E: 'Emprendedor', C: 'Convencional' };\n  const scores = resultado.riasecScores || {};\n  const maxScore = Math.max.apply(null, Object.values(scores).concat([1]));\n\n  const riasecBars = Object.entries(scores).sort(function(a, b) { return b[1] - a[1]; }).map(function(entry) {\n    var k = entry[0], v = entry[1];\n    var pct = Math.round((v / maxScore) * 100);\n    var isTop = pct >= 70;\n    return '<tr><td style=\"padding:5px;font-size:13px;font-weight:' + (isTop ? '700' : '400') + ';color:' + (isTop ? '#4f46e5' : '#374151') + ';width:130px\">' + dims[k] + '</td><td style=\"padding:5px\"><table style=\"width:220px;background:#e5e7eb;border-radius:4px;height:14px\"><tr><td style=\"background:' + (isTop ? '#4f46e5' : '#818cf8') + ';width:' + pct + '%;border-radius:4px;height:14px\"></td></tr></table></td><td style=\"padding:5px;font-size:12px;color:#9ca3af\">' + v + ' pts</td></tr>';\n  }).join('');\n\n  const carrerasHTML = (resultado.carreras || []).map(function(c, i) {\n    return '<div style=\"border:1px solid #e5e7eb;border-radius:8px;margin:12px 0;padding:16px\"><h3 style=\"margin:0 0 8px;font-size:15px;font-weight:700;color:#1f2937\">' + (i+1) + '. ' + c.nombre + '</h3><span style=\"background:#4f46e5;color:white;padding:3px 10px;border-radius:12px;font-size:12px\">' + c.match + '% match</span><p style=\"margin:8px 0;font-size:13px;color:#4b5563\">' + c.descripcion + '</p><span style=\"font-size:11px;color:#9ca3af\">📚 ' + c.area + ' · ⏱ ' + c.duracion + ' · 💼 ' + c.salida + '</span></div>';\n  }).join('');\n\n  const fortalezasHTML = (resultado.fortalezas || []).map(function(f) { return '<li style=\"font-size:14px;color:#374151;line-height:1.8\">' + f + '</li>'; }).join('');\n  const consejosHTML = (resultado.consejosEstudio || []).map(function(c) { return '<li style=\"font-size:14px;color:#374151;line-height:1.8\">' + c + '</li>'; }).join('');\n  const fecha = new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });\n\n  const htmlReport = '<!DOCTYPE html><html><head><meta charset=\"UTF-8\"></head><body style=\"margin:0;padding:0;background:#f3f4f6\"><table width=\"100%\" style=\"background:#f3f4f6;padding:32px\"><tr><td align=\"center\"><table width=\"600\" style=\"background:white;border-radius:12px;overflow:hidden\"><tr><td style=\"background:#4f46e5;padding:40px;text-align:center\"><p style=\"margin:0 0 8px;font-size:11px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:3px\">Informe Vocacional</p><h1 style=\"margin:0 0 16px;font-size:24px;font-weight:700;color:white\">' + resultado.perfilTitulo + '</h1><table align=\"center\"><tr><td style=\"padding:0 4px\"><span style=\"display:inline-block;background:rgba(255,255,255,0.2);border:2px solid rgba(255,255,255,0.5);border-radius:8px;width:44px;height:44px;text-align:center;line-height:44px;font-size:22px;font-weight:900;color:white\">' + (resultado.hollandCode || 'XXX')[0] + '</span></td><td style=\"padding:0 4px\"><span style=\"display:inline-block;background:rgba(255,255,255,0.2);border:2px solid rgba(255,255,255,0.5);border-radius:8px;width:44px;height:44px;text-align:center;line-height:44px;font-size:22px;font-weight:900;color:white\">' + (resultado.hollandCode || 'XXX')[1] + '</span></td><td style=\"padding:0 4px\"><span style=\"display:inline-block;background:rgba(255,255,255,0.2);border:2px solid rgba(255,255,255,0.5);border-radius:8px;width:44px;height:44px;text-align:center;line-height:44px;font-size:22px;font-weight:900;color:white\">' + (resultado.hollandCode || 'XXX')[2] + '</span></td></tr></table><p style=\"margin:12px 0 0;font-size:12px;color:rgba(255,255,255,0.6)\">Código Holland</p></td></tr><tr><td style=\"padding:32px\"><p style=\"margin:0 0 8px;font-size:14px;color:#9ca3af\">Hola, <strong style=\"color:#1f2937\">' + resultado.userName + '</strong></p><p style=\"margin:0 0 32px;font-size:15px;color:#374151;line-height:1.7\">' + (resultado.perfilDescripcion || '') + '</p><h2 style=\"margin:0 0 16px;font-size:16px;font-weight:700;color:#1f2937;border-bottom:2px solid #e5e7eb;padding-bottom:8px\">📊 Tu perfil RIASEC</h2><table>' + riasecBars + '</table><h2 style=\"margin:32px 0 16px;font-size:16px;font-weight:700;color:#1f2937;border-bottom:2px solid #e5e7eb;padding-bottom:8px\">⭐ Tus fortalezas</h2><ul style=\"padding-left:20px\">' + fortalezasHTML + '</ul><h2 style=\"margin:32px 0 16px;font-size:16px;font-weight:700;color:#1f2937;border-bottom:2px solid #e5e7eb;padding-bottom:8px\">🎓 Carreras recomendadas</h2>' + carrerasHTML + '<h2 style=\"margin:32px 0 16px;font-size:16px;font-weight:700;color:#1f2937;border-bottom:2px solid #e5e7eb;padding-bottom:8px\">💡 Consejos</h2><ol style=\"padding-left:20px\">' + consejosHTML + '</ol><table width=\"100%\" style=\"background:#f5f3ff;border-left:4px solid #4f46e5;border-radius:4px;margin:32px 0\"><tr><td style=\"padding:20px\"><p style=\"margin:0;font-family:Georgia,serif;font-size:16px;color:#4f46e5;font-style:italic\">&ldquo;' + (resultado.fraseMotivadora || '') + '&rdquo;</p></td></tr></table></td></tr><tr><td style=\"background:#f9fafb;padding:24px;text-align:center;border-top:1px solid #e5e7eb\"><p style=\"margin:0;font-size:11px;color:#9ca3af\">Informe generado el ' + fecha + ' · Test Vocacional Profesional</p></td></tr></table></td></tr></table></body></html>';\n\n  return [{ json: { email: resultado.email, userName: resultado.userName, htmlReport: htmlReport, skipEmail: false } }];\n} catch(e) {\n  throw new Error('[Build HTML] ' + e.message);\n}"
+      },
+      "id": "cee5620a-4f80-4ad3-aaac-db01fc6ef757",
+      "name": "[Code] Construir HTML informe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1488, -1264]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-email-condition",
+              "leftValue": "={{ $json.skipEmail }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9ffe3474-9758-4746-8861-e07f9cc3045e",
+      "name": "[IF] Tiene email",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [-1264, -1264]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ 'Tu informe vocacional VocTest IA está listo, ' + $json.userName + '!' }}",
+        "message": "={{ $json.htmlReport }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "f7633d80-bc3e-4628-9b76-6711ce613076",
+      "name": "[Gmail] Enviar informe",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [-1040, -1360],
+      "webhookId": "40ec1162-4aae-4e16-aaca-d6133dffb865",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "OiZEeFUODmvbFi12",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Análisis completado correctamente' }) }}",
+        "options": {}
+      },
+      "id": "4cb1004f-cff0-4690-9ec5-30a1432b0828",
+      "name": "[Respond] Éxito",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [-816, -1264]
+    }
+  ],
+  "connections": {
+    "[Webhook] Recibir análisis": {
+      "main": [
+        [
+          {
+            "node": "[Code] Preparar análisis RIASEC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Code] Preparar análisis RIASEC": {
+      "main": [
+        [
+          {
+            "node": "[HTTP] OpenAI analizador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[HTTP] OpenAI analizador": {
+      "main": [
+        [
+          {
+            "node": "[Code] Parsear resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Code] Parsear resultado": {
+      "main": [
+        [
+          {
+            "node": "[Redis] SET Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Redis] SET Resultado": {
+      "main": [
+        [
+          {
+            "node": "[Code] Construir HTML informe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Code] Construir HTML informe": {
+      "main": [
+        [
+          {
+            "node": "[IF] Tiene email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[IF] Tiene email": {
+      "main": [
+        [
+          {
+            "node": "[Gmail] Enviar informe",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Respond] Éxito",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Gmail] Enviar informe": {
+      "main": [
+        [
+          {
+            "node": "[Respond] Éxito",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "867286dd2db3a76bcb1c7dbac3e0e369ad1e6f723fb9c44a6e80d547a9a696cd"
+  }
+}

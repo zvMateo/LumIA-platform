@@ -1,0 +1,243 @@
+{
+  "settings": {
+    "timezone": "America/Argentina/Buenos_Aires",
+    "version": "1.0.0",
+    "instance": {
+      "name": "VocTest IA",
+      "description": "Test Vocacional con Inteligencia Artificial",
+      "url": "https://gmn8nwebhook.goodapps.space"
+    }
+  },
+  "workflows": [
+    {
+      "id": "voc-test-orquestador",
+      "name": "VocTest — Orquestador Principal",
+      "description": "Punto de entrada principal para todas las peticiones del test vocacional",
+      "tags": ["voc-test", "orquestador", "produccion"],
+      "active": true,
+      "nodes": "Ver archivo: 01-orquestador-principal.json",
+      "connections": "Ver archivo: 01-orquestador-principal.json",
+      "settings": {
+        "saveManualExecutions": true,
+        "saveExecutionProgress": true,
+        "executionTimeout": 3600
+      },
+      "webhook": {
+        "path": "voctest/chat",
+        "method": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "voc-test-chat",
+      "name": "VocTest — Chat Conversacional",
+      "description": "Procesamiento de la conversación del test vocacional con agente de IA",
+      "tags": ["voc-test", "chat", "produccion"],
+      "active": true,
+      "nodes": "Ver archivo: 02-chat-conversacional.json",
+      "connections": "Ver archivo: 02-chat-conversacional.json",
+      "settings": {
+        "saveManualExecutions": true,
+        "saveExecutionProgress": true,
+        "executionTimeout": 3600
+      },
+      "webhook": {
+        "path": "voctest/chat-handler",
+        "method": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "voc-test-analisis",
+      "name": "VocTest — Análisis e Informe",
+      "description": "Generación del informe RIASEC completo y envío de email",
+      "tags": ["voc-test", "analisis", "produccion"],
+      "active": true,
+      "nodes": "Ver archivo: 03-analisis-informe.json",
+      "connections": "Ver archivo: 03-analisis-informe.json",
+      "settings": {
+        "saveManualExecutions": true,
+        "saveExecutionProgress": true,
+        "executionTimeout": 3600
+      },
+      "webhook": {
+        "path": "voctest/analysis",
+        "method": "POST",
+        "responseMode": "responseNode"
+      }
+    }
+  ],
+  "credentials": [
+    {
+      "id": "kC0Bfi0yQOAqlL1I",
+      "name": "Redis_GoodApps",
+      "type": "redis",
+      "data": {
+        "host": "redis://localhost:6379",
+        "port": 6379,
+        "database": 0,
+        "password": ""
+      },
+      "nodesAccess": [
+        {
+          "nodeType": "n8n-nodes-base.redis",
+          "user": "all"
+        },
+        {
+          "nodeType": "@n8n/n8n-nodes-langchain.memoryRedisChat",
+          "user": "all"
+        }
+      ],
+      "shared": true
+    },
+    {
+      "id": "LVIDq0T0z4cISnRM",
+      "name": "OpenAi GoodApps",
+      "type": "openAiApi",
+      "data": {
+        "apiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "organization": ""
+      },
+      "nodesAccess": [
+        {
+          "nodeType": "@n8n/n8n-nodes-langchain.openAi",
+          "user": "all"
+        },
+        {
+          "nodeType": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+          "user": "all"
+        },
+        {
+          "nodeType": "n8n-nodes-base.httpRequest",
+          "user": "all"
+        }
+      ],
+      "shared": true
+    },
+    {
+      "id": "OiZEeFUODmvbFi12",
+      "name": "Gmail account",
+      "type": "gmailOAuth2",
+      "data": {
+        "clientId": "xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com",
+        "clientSecret": "GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "scope": "https://www.googleapis.com/auth/gmail.send",
+        "oauthTokenData": {
+          "access_token": "ya29.xxx",
+          "refresh_token": "1//0xxx",
+          "scope": "https://www.googleapis.com/auth/gmail.send",
+          "token_type": "Bearer",
+          "expiry_date": 1743350400000
+        }
+      },
+      "nodesAccess": [
+        {
+          "nodeType": "n8n-nodes-base.gmail",
+          "user": "all"
+        }
+      ],
+      "shared": true
+    }
+  ],
+  "variables": {
+    "OPENAI_MODEL": "gpt-4o",
+    "REDIS_TTL_SESSION_ACTIVE": 7200,
+    "REDIS_TTL_SESSION_COMPLETE": 86400,
+    "REDIS_TTL_RESULT": 86400,
+    "MAX_QUESTIONS": 25,
+    "EMAIL_FROM": "testvocacional@gmail.com",
+    "EMAIL_FROM_NAME": "VocTest IA"
+  },
+  "environment": {
+    "development": {
+      "url": "http://localhost:5678",
+      "redis": "redis://localhost:6379",
+      "debug": true
+    },
+    "production": {
+      "url": "https://gmn8nwebhook.goodapps.space",
+      "redis": "redis://redis-prod:6379",
+      "debug": false
+    }
+  },
+  "instructions": {
+    "es": {
+      "title": "Guía de Configuración Rápida",
+      "steps": [
+        {
+          "step": 1,
+          "title": "Importar Workflows",
+          "description": "Importa los 3 archivos JSON en orden",
+          "details": [
+            "1. Ve a Workflows → Importar",
+            "2. Importa 01-orquestador-principal.json",
+            "3. Importa 02-chat-conversacional.json",
+            "4. Importa 03-analisis-informe.json",
+            "5. Activa cada workflow (switch azul)"
+          ]
+        },
+        {
+          "step": 2,
+          "title": "Configurar Credenciales",
+          "description": "Configura las 3 credenciales necesarias",
+          "details": [
+            "1. Ve a Credentials",
+            "2. Crea credencial Redis con ID: kC0Bfi0yQOAqlL1I",
+            "3. Crea credencial OpenAI con ID: LVIDq0T0z4cISnRM",
+            "4. Crea credencial Gmail con ID: OiZEeFUODmvbFi12"
+          ]
+        },
+        {
+          "step": 3,
+          "title": "Actualizar URLs",
+          "description": "Actualiza las URLs en los workflows",
+          "details": [
+            "1. En workflow 01, actualiza nodo HTTP: '[HTTP] Llamar Workflow Chat'",
+            "2. En workflow 02, actualiza nodo HTTP: '[HTTP] Llamar análisis'",
+            "3. Usa las URLs de tu instancia de n8n"
+          ]
+        },
+        {
+          "step": 4,
+          "title": "Probar",
+          "description": "Prueba el flujo completo",
+          "details": [
+            "1. Ejecuta: ./test-workflows.sh",
+            "2. Revisa que las respuestas sean correctas",
+            "3. Verifica que los emails se envíen",
+            "4. Confirma que los resultados se guarden"
+          ]
+        }
+      ],
+      "urls": {
+        "chat": "https://gmn8nwebhook.goodapps.space/webhook/voctest/chat",
+        "status": "https://gmn8nwebhook.goodapps.space/webhook/voctest/chat",
+        "analysis": "https://gmn8nwebhook.goodapps.space/webhook/voctest/analysis"
+      },
+      "support": {
+        "email": "soporte@voc-test-ia.com",
+        "documentation": "README.md",
+        "diagrams": "DIAGRAM.md",
+        "checklist": "CHECKLIST.md"
+      }
+    }
+  },
+  "metadata": {
+    "created": "2026-03-30T12:00:00Z",
+    "updated": "2026-03-30T12:00:00Z",
+    "version": "1.0.0",
+    "author": "VocTest IA Team",
+    "license": "MIT",
+    "repository": "https://github.com/voc-test-ia/n8n-workflows",
+    "dependencies": {
+      "n8n": ">=1.0.0",
+      "redis": ">=6.0.0",
+      "openai": ">=4.0.0"
+    },
+    "compatibility": {
+      "node": ">=18.0.0",
+      "docker": ">=20.10.0",
+      "n8n": ">=1.0.0"
+    }
+  }
+}

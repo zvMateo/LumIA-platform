@@ -1,0 +1,10 @@
+{
+  "parameters": {
+    "jsCode": "const meta = $('[Code] Preparar análisis RIASEC').item.json;\nreturn [{ json: {\n  sessionId: meta.sessionId,\n  email: meta.email,\n  userName: meta.userName,\n  hollandCode: meta.hollandCode,\n  riasecScores: meta.riasecScores,\n  perfilTitulo: 'Tu perfil vocacional',\n  perfilDescripcion: 'Estamos procesando tu informe. Volvé a consultar en unos minutos.',\n  fortalezas: [],\n  areasDesarrollo: [],\n  carreras: [],\n  consejosEstudio: [],\n  fraseMotivadora: 'Tu camino vocacional te espera.',\n  generadoEn: new Date().toISOString(),\n  status: 'ERROR'\n} }];"
+  },
+  "id": "fallback-openai-error",
+  "name": "[Code] Fallback OpenAI error",
+  "type": "n8n-nodes-base.code",
+  "typeVersion": 2,
+  "position": [-1968, -1600]
+}

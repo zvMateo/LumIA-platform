@@ -1,0 +1,189 @@
+{
+  "name": "VocTest — Orquestador Principal",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voctest/chat",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "webhook-main-001",
+      "name": "[Webhook] Entrada chat",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "voctest-chat-v1",
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "check-status-condition",
+                    "leftValue": "={{ $json.body.checkStatus }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Status Check"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Chat Message"
+        }
+      },
+      "id": "switch-main-001",
+      "name": "[Switch] Tipo de operación",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "value",
+        "key": "={{ 'voc:result:' + $json.body.sessionId }}",
+        "options": {}
+      },
+      "id": "redis-get-result-001",
+      "name": "[Redis] GET Resultado",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [460, 480],
+      "credentials": {
+        "redis": {
+          "id": "kC0Bfi0yQOAqlL1I",
+          "name": "Redis_GoodApps"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const raw = $input.item.json.value;\n  const sessionId = $('[Webhook] Entrada chat').item.json.body.sessionId;\n  \n  // Si no hay resultado en Redis\n  if (!raw) {\n    return [{ json: {\n      ready: false,\n      sessionId,\n      message: 'Analizando tu perfil vocacional...'\n    } }];\n  }\n  \n  // Parsear el resultado guardado\n  const resultado = typeof raw === 'string' ? JSON.parse(raw) : raw;\n  \n  // Retornar el formato VocTestResult completo\n  return [{ json: {\n    ready: true,\n    sessionId: resultado.sessionId,\n    hollandCode: resultado.hollandCode,\n    perfilTitulo: resultado.perfilTitulo,\n    perfilDescripcion: resultado.perfilDescripcion,\n    fortalezas: resultado.fortalezas,\n    areasDesarrollo: resultado.areasDesarrollo,\n    carreras: resultado.carreras,\n    riasecScores: resultado.riasecScores,\n    consejosEstudio: resultado.consejosEstudio,\n    fraseMotivadora: resultado.fraseMotivadora,\n    generadoEn: resultado.generadoEn\n  } }];\n} catch(e) {\n  // Error al parsear - retornar estado no listo\n  return [{ json: {\n    ready: false,\n    sessionId: $('[Webhook] Entrada chat').item.json.body.sessionId,\n    message: 'Procesando tu resultado...'\n  } }];\n}"
+      },
+      "id": "code-format-status-001",
+      "name": "[Code] Formatear respuesta status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 480]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond-status-001",
+      "name": "[Respond] Status resultado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [900, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gmn8nwebhook.goodapps.space/webhook/voctest/chat-handler",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "afc90c80-bbc5-4164-b825-a851d16c69f4",
+      "name": "[HTTP] Llamar Workflow Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1056, -400]
+    }
+  ],
+  "connections": {
+    "[Webhook] Entrada chat": {
+      "main": [
+        [
+          {
+            "node": "[Switch] Tipo de operación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Switch] Tipo de operación": {
+      "main": [
+        [
+          {
+            "node": "[Redis] GET Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[HTTP] Llamar Workflow Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Redis] GET Resultado": {
+      "main": [
+        [
+          {
+            "node": "[Code] Formatear respuesta status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Code] Formatear respuesta status": {
+      "main": [
+        [
+          {
+            "node": "[Respond] Status resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "867286dd2db3a76bcb1c7dbac3e0e369ad1e6f723fb9c44a6e80d547a9a696cd"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

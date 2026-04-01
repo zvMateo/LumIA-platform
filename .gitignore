@@ -1,0 +1,71 @@
+# ==========================================
+# ENVIRONMENT - CRITICAL: Never commit secrets
+# ==========================================
+.env
+.env.*
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# ==========================================
+# NODE & PACKAGE MANAGER
+# ==========================================
+node_modules/
+.pnpm-store/
+.pnp
+.pnp.js
+
+# ==========================================
+# BUILD OUTPUTS
+# ==========================================
+.next/
+dist/
+.turbo/
+*.tsbuildinfo
+.vercel/
+.output/
+
+# ==========================================
+# IDE & EDITORS
+# ==========================================
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# ==========================================
+# OS
+# ==========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==========================================
+# LOGS & DEBUG
+# ==========================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ==========================================
+# PRISMA / DATABASE
+# ==========================================
+prisma/*.db
+prisma/*.db-journal
+*.db
+
+# ==========================================
+# TEST COVERAGE
+# ==========================================
+coverage/
+.nyc_output/
+
+# ==========================================
+# LOCK FILES (keep pnpm-lock, ignore others)
+# ==========================================
+package-lock.json
+yarn.lock
