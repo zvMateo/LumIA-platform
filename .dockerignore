@@ -1,0 +1,16 @@
+node_modules
+dist
+.next
+.turbo
+.env
+.env.*
+.git
+.github
+.vscode
+.idea
+*.md
+*.log
+coverage
+test
+*.spec.ts
+*.test.ts
