@@ -1,6 +1,6 @@
 // packages/shared/src/types/chat.types.ts
 export type Plan = 'b2c' | 'b2b' | 'b2b2c';
-export type ChatPhase = 'WELCOME' | 'EXPLORING' | 'COMPLETE';
+export type ChatPhase = 'WELCOME' | 'EXPLORING' | 'AWAITING_EMAIL' | 'COMPLETE';
 
 export interface ChatRequest {
   sessionId: string;
